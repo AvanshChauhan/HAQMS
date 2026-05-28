@@ -1,6 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  /* config options here */
+  outputFileTracingRoot: import.meta.dirname,
+  turbopack: {
+    root: import.meta.dirname,
+  },
 };
 
 export default nextConfig;
