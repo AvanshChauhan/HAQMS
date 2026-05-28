@@ -17,21 +17,33 @@ export const AuthProvider = ({ children }) => {
   // a perfect exercise for internship candidates to move to environment variables.
   const API_BASE_URL = 'http://localhost:5000/api';
 
-  useEffect(() => {
-    // Check for stored token and user on initialization
-    const storedToken = localStorage.getItem('haqms_token');
-    const storedUser = localStorage.getItem('haqms_user');
+  const logout = () => {
+    localStorage.removeItem('haqms_token');
+    localStorage.removeItem('haqms_user');
+    setToken(null);
+    setUser(null);
+    router.push('/login');
+  };
 
-    if (storedToken && storedUser) {
-      try {
-        setToken(storedToken);
-        setUser(JSON.parse(storedUser));
-      } catch (e) {
-        console.error('Failed to parse user details from localStorage', e);
-        logout();
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      // Check for stored token and user on initialization
+      const storedToken = localStorage.getItem('haqms_token');
+      const storedUser = localStorage.getItem('haqms_user');
+
+      if (storedToken && storedUser) {
+        try {
+          setToken(storedToken);
+          setUser(JSON.parse(storedUser));
+        } catch (e) {
+          console.error('Failed to parse user details from localStorage', e);
+          logout();
+        }
       }
-    }
-    setLoading(false);
+      setLoading(false);
+    }, 0);
+
+    return () => clearTimeout(timeoutId);
   }, []);
 
   const login = async (email, password) => {
@@ -102,14 +114,6 @@ export const AuthProvider = ({ children }) => {
     } finally {
       setLoading(false);
     }
-  };
-
-  const logout = () => {
-    localStorage.removeItem('haqms_token');
-    localStorage.removeItem('haqms_user');
-    setToken(null);
-    setUser(null);
-    router.push('/login');
   };
 
   return (

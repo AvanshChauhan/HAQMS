@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import Navbar from '@/components/common/Navbar';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { 
   Users, CalendarDays, Activity, Search, Sparkles, UserPlus, 
@@ -19,12 +20,10 @@ export default function Dashboard() {
     if (!user) {
       router.push('/login');
     }
-  }, [user]);
-
-  if (!user) return null;
+  }, [user, router]);
 
   // Global State
-  const [activeTab, setActiveTab] = useState(user.role === 'ADMIN' ? 'reports' : user.role === 'RECEPTIONIST' ? 'patients' : 'appointments');
+  const [activeTab, setActiveTab] = useState(user?.role === 'ADMIN' ? 'reports' : user?.role === 'RECEPTIONIST' ? 'patients' : 'appointments');
 
   // ==========================================
   // STATE FOR RECEPTIONIST WORKFLOWS
@@ -32,6 +31,7 @@ export default function Dashboard() {
   const [patients, setPatients] = useState([]);
   const [patientsLoading, setPatientsLoading] = useState(false);
   const [patientSearch, setPatientSearch] = useState('');
+  const [debouncedPatientSearch, setDebouncedPatientSearch] = useState('');
   const [patientGender, setPatientGender] = useState('All');
   const [patientsPagination, setPatientsPagination] = useState({ page: 1, totalPages: 1 });
   
@@ -75,8 +75,9 @@ export default function Dashboard() {
   const fetchPatients = async (page = 1) => {
     setPatientsLoading(true);
     try {
-      // Inefficient memory pagination called from client
-      const res = await fetch(`${API_BASE_URL}/patients?page=${page}&limit=5&search=${patientSearch}&gender=${patientGender}`, {
+      const search = encodeURIComponent(debouncedPatientSearch);
+      const gender = encodeURIComponent(patientGender);
+      const res = await fetch(`${API_BASE_URL}/patients?page=${page}&limit=5&search=${search}&gender=${gender}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await res.json();
@@ -95,12 +96,21 @@ export default function Dashboard() {
     }
   };
 
-  // Trigger Patient List Fetch (Every keystroke trigger re-renders parent! - Performance bug)
   useEffect(() => {
-    if (user.role === 'RECEPTIONIST' || user.role === 'ADMIN') {
-      fetchPatients(1);
+    const timeoutId = setTimeout(() => {
+      setDebouncedPatientSearch(patientSearch);
+    }, 400);
+
+    return () => clearTimeout(timeoutId);
+  }, [patientSearch]);
+
+  // Trigger Patient List Fetch using debounced search text.
+  useEffect(() => {
+    if (user?.role === 'RECEPTIONIST' || user?.role === 'ADMIN') {
+      const timeoutId = setTimeout(() => fetchPatients(1), 0);
+      return () => clearTimeout(timeoutId);
     }
-  }, [patientSearch, patientGender]);
+  }, [debouncedPatientSearch, patientGender, user?.role]);
 
   // Fetch Doctors for booking drop-down
   const fetchDoctorsDropdown = async () => {
@@ -116,8 +126,11 @@ export default function Dashboard() {
   };
 
   useEffect(() => {
-    fetchDoctorsDropdown();
-  }, []);
+    if (user) {
+      const timeoutId = setTimeout(() => fetchDoctorsDropdown(), 0);
+      return () => clearTimeout(timeoutId);
+    }
+  }, [user?.id]);
 
   // Handle Patient Registration
   const handleRegisterPatient = async (e) => {
@@ -196,7 +209,7 @@ export default function Dashboard() {
       if (res.ok) {
         setBookingMessage('Success: Appointment booked successfully!');
         setBookingReason('');
-        if (user.role === 'DOCTOR') fetchDoctorWorklist();
+        if (user?.role === 'DOCTOR') fetchDoctorWorklist();
       } else {
         setBookingMessage(`Error: ${data.error || 'Failed to book'}`);
       }
@@ -240,7 +253,7 @@ export default function Dashboard() {
       const data = await res.json();
       if (res.ok) {
         setCheckinMessage(`Checked in! Generated Token #${data.token.tokenNumber}`);
-        if (user.role === 'DOCTOR') fetchDoctorWorklist();
+        if (user?.role === 'DOCTOR') fetchDoctorWorklist();
       } else {
         setCheckinMessage(`Error check-in: ${data.error}`);
       }
@@ -253,7 +266,7 @@ export default function Dashboard() {
   // DOCTOR WORKFLOW FUNCTIONS
   // ==========================================
   const fetchDoctorWorklist = async () => {
-    if (user.role !== 'DOCTOR') return;
+    if (user?.role !== 'DOCTOR') return;
     try {
       // Find matching doctor from doctors dropdown using user ID link
       const matchedDoc = doctorsList.find(d => d.userId === user.id);
@@ -281,10 +294,10 @@ export default function Dashboard() {
   };
 
   useEffect(() => {
-    if (user.role === 'DOCTOR' && doctorsList.length > 0) {
+    if (user?.role === 'DOCTOR' && doctorsList.length > 0) {
       fetchDoctorWorklist();
     }
-  }, [doctorsList]);
+  }, [doctorsList, user?.role]);
 
   // Update token status (WAITING -> CALLING -> COMPLETED / SKIPPED)
   const handleUpdateQueueStatus = async (tokenId, newStatus) => {
@@ -363,6 +376,8 @@ export default function Dashboard() {
       console.error(e);
     }
   };
+
+  if (!user) return null;
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -889,17 +904,12 @@ export default function Dashboard() {
                 <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 text-xs space-y-2">
                   <h4 className="font-bold text-slate-400 uppercase tracking-wider">Clinical Background Information</h4>
                   
-                  {/* FRONTEND CRASH BUG:
-                      Assuming medicalHistory is always populated. Accesses a method on a nullable property
-                      without optional chaining! If medicalHistory is null (which is the case for Batman, Clark Kent, etc.),
-                      this code throws: "Cannot read properties of null (reading 'toUpperCase')" and crashes the app! */}
                   <p className="text-slate-700 dark:text-slate-300 leading-5 text-sm font-semibold">
-                    {selectedPatientHistory.medicalHistory.toUpperCase()}
+                    {selectedPatientHistory.medicalHistory?.toUpperCase() || 'NO RECORDED CLINICAL ANAMNESIS'}
                   </p>
                 </div>
 
                 <div className="pt-2 flex justify-between items-center text-xs">
-                  {/* Incomplete Missing Route trigger -> will route to 404 page! */}
                   <Link 
                     href={`/patients/${selectedPatientHistory.id}/history-records`} 
                     className="text-teal-600 font-extrabold hover:underline flex items-center gap-1"

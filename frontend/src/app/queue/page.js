@@ -36,7 +36,7 @@ export default function QueueMonitor() {
 
   useEffect(() => {
     // Initial fetch
-    fetchQueueData();
+    const initialFetchId = setTimeout(() => fetchQueueData(), 0);
 
     // MEMORY LEAK BUG:
     // This setInterval has NO cleanup function (does not return clearInterval).
@@ -45,13 +45,14 @@ export default function QueueMonitor() {
     // dozens of parallel intervals will poll the database, causing memory bloat,
     // state update crashes on unmounted components, and heavy server load.
     const intervalId = setInterval(() => {
-      console.log(`[POLL] Active Queue Poll #${refreshCount + 1} firing...`);
       fetchQueueData();
       setRefreshCount((prev) => prev + 1);
     }, 3000);
 
-    // Junior Developer Note: "Interval created, will run forever to keep dashboard fully synced!"
-    // Missing: return () => clearInterval(intervalId);
+    return () => {
+      clearTimeout(initialFetchId);
+      clearInterval(intervalId);
+    };
   }, []); // Note that refreshCount dependency is missing too, causing stale closure on log!
 
   // Group tokens by doctor
